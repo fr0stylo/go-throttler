@@ -30,17 +30,18 @@ func fakeHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 }
 
-func TestMiddleware_ShouldReturn200(t *testing.T) {
-	fakeLogger := NewSpyLogger()
-
-	mw := Middleware(&ThrottlerOpts{
-		ExhaustionCount: 1,
-		Log:             fakeLogger,
-	})
+func setupServer(opt *opts) *httptest.Server {
+	mw := Middleware(opt)
 
 	wrap := mw(fakeHandler)
 
 	srv := httptest.NewServer(wrap)
+
+	return srv
+}
+
+func TestMiddleware_ShouldReturn200(t *testing.T) {
+	srv := setupServer(WithOpts(UNLIMITED).WithVerbose(false))
 	defer srv.Close()
 
 	resp, _ := http.Get(srv.URL)
@@ -51,16 +52,7 @@ func TestMiddleware_ShouldReturn200(t *testing.T) {
 }
 
 func TestMiddleware_ShouldReturn429(t *testing.T) {
-	fakeLogger := NewSpyLogger()
-
-	mw := Middleware(&ThrottlerOpts{
-		ExhaustionCount: 1,
-		Log:             fakeLogger,
-	})
-
-	wrap := mw(fakeHandler)
-
-	srv := httptest.NewServer(wrap)
+	srv := setupServer(WithOpts(1).WithVerbose(false))
 	defer srv.Close()
 
 	resp, _ := http.Get(srv.URL)
@@ -74,20 +66,9 @@ func TestMiddleware_ShouldReturn429(t *testing.T) {
 func TestMiddleware_Verbose_False(t *testing.T) {
 	fakeLogger := NewSpyLogger()
 
-	verbose := false
-	mw := Middleware(&ThrottlerOpts{
-		ExhaustionCount: 1,
-		Log:             fakeLogger,
-		Verbose:         &verbose,
-	})
-
-	wrap := mw(fakeHandler)
-	srv := httptest.NewServer(wrap)
+	srv := setupServer(WithOpts(1).WithVerbose(false).WithLogger(fakeLogger))
 	defer srv.Close()
 
-	http.Get(srv.URL)
-	http.Get(srv.URL)
-	http.Get(srv.URL)
 	http.Get(srv.URL)
 	http.Get(srv.URL)
 
@@ -98,15 +79,7 @@ func TestMiddleware_Verbose_False(t *testing.T) {
 
 func BenchmarkMiddleware(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		fakeLogger := NewSpyLogger()
-
-		mw := Middleware(&ThrottlerOpts{
-			ExhaustionCount: int64(i),
-			Log:             fakeLogger,
-		})
-
-		wrap := mw(fakeHandler)
-		srv := httptest.NewServer(wrap)
+		srv := setupServer(WithOpts(UNLIMITED).WithVerbose(false))
 		defer srv.Close()
 
 		for j := 0; j < i; j++ {
@@ -120,14 +93,7 @@ func BenchmarkMiddleware(b *testing.B) {
 
 func BenchmarkMiddleware_Failure(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		verbose := false
-		mw := Middleware(&ThrottlerOpts{
-			ExhaustionCount: 0,
-			Verbose:         &verbose,
-		})
-
-		wrap := mw(fakeHandler)
-		srv := httptest.NewServer(wrap)
+		srv := setupServer(WithOpts(1).WithVerbose(false))
 		defer srv.Close()
 
 		for j := 0; j < i; j++ {
@@ -141,16 +107,8 @@ func BenchmarkMiddleware_Failure(b *testing.B) {
 
 func BenchmarkMiddleware_Verbose(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		verbose := true
 		fakeLogger := NewSpyLogger()
-		mw := Middleware(&ThrottlerOpts{
-			ExhaustionCount: 0,
-			Verbose:         &verbose,
-			Log:             fakeLogger,
-		})
-
-		wrap := mw(fakeHandler)
-		srv := httptest.NewServer(wrap)
+		srv := setupServer(WithOpts(1).WithVerbose(true).WithLogger(fakeLogger))
 		defer srv.Close()
 
 		for j := 0; j < i; j++ {

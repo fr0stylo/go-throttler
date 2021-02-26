@@ -11,9 +11,7 @@ func Test(w http.ResponseWriter, r *http.Request) {
 func main() {
 	mux := http.NewServeMux()
 
-	mux.Handle("/", throttler.Middleware(&throttler.ThrottlerOpts{
-		ExhaustionCount: 100,
-	})(Test))
+	mux.Handle("/", throttler.Middleware(throttler.WithOpts(100))(Test))
 
 	http.ListenAndServe(":3000", mux)
 }

@@ -10,31 +10,29 @@ import (
 	"time"
 )
 
-type ICacheProvider interface {
-	AddItem(k string, x int64) error
-	Increment(string, int64) (int64, error)
-}
-
-type ThrottlerOpts struct {
-	ExhaustionCount     int64
-	Cache               ICacheProvider
-	Verbose             *bool
-	Log                 ILogger
-	LimitReachedMessage *string
-}
+const UNLIMITED = -1
 
 type middleware struct {
-	cache           ICacheProvider
-	log             ILogger
-	verbose         bool
-	exhaustionCount int64
+	cache                ICacheProvider
+	log                  ILogger
+	verbose              bool
+	exhaustionCount      int64
+	ipResolver           func(r *http.Request) (string, error)
+	ipThrottlingStrategy map[*net.IPNet]int64
 }
 
-type ILogger interface {
-	Print(v ...interface{})
+func ipResolver(r *http.Request) (string, error) {
+	ipString := strings.Split(r.RemoteAddr, ":")[0]
+	ip := net.ParseIP(ipString)
+
+	if ip == nil {
+		return "", errors.New("malformed ip")
+	}
+
+	return ip.String(), nil
 }
 
-func newMiddleware(opts *ThrottlerOpts) *middleware {
+func newMiddleware(opts *opts) *middleware {
 	var cacheProvider ICacheProvider
 	cacheProvider = NewCacheAdapter(time.Minute, time.Second*90)
 	if opts.Cache != nil {
@@ -52,40 +50,67 @@ func newMiddleware(opts *ThrottlerOpts) *middleware {
 		verbose = *opts.Verbose
 	}
 
+	ipResolveFn := ipResolver
+	if opts.IpResolver != nil {
+		ipResolveFn = *opts.IpResolver
+	}
+
 	return &middleware{
-		cache:           cacheProvider,
-		log:             logger,
-		verbose:         verbose,
-		exhaustionCount: opts.ExhaustionCount,
+		cache:                cacheProvider,
+		log:                  logger,
+		verbose:              verbose,
+		exhaustionCount:      opts.ExhaustionCount,
+		ipResolver:           ipResolveFn,
+		ipThrottlingStrategy: opts.IpThrottlingStrategy,
 	}
 }
 
+func (m *middleware) getExhaustValue(ip string) int64 {
+	requestExhaustValue := m.exhaustionCount
+	if m.ipThrottlingStrategy != nil {
+		for k, v := range m.ipThrottlingStrategy {
+			ipNet := *k
+			if ipNet.Contains(net.ParseIP(ip)) {
+				requestExhaustValue = v
+			}
+		}
+	}
+
+	return requestExhaustValue
+}
+
 func (m *middleware) throttle(log chan<- string, r *http.Request) error {
-	ipString := strings.Split(r.RemoteAddr, ":")[0]
-	ip := net.ParseIP(ipString)
-	if ip != nil {
-		value, err := m.cache.Increment(ip.String(), 1)
+	ip, err := m.ipResolver(r)
+	if err != nil {
+		return err
+	}
 
-		if err != nil {
-			m.cache.AddItem(ip.String(), 1)
+	value, err := m.cache.Increment(ip, 1)
 
-			return nil
-		}
+	if err != nil {
+		m.cache.AddItem(ip, 1)
 
-		if value > m.exhaustionCount {
-			log <- fmt.Sprintf("[Throttled] %s reached count", ip)
-			return errors.New("Request limit reached, Cooldown a bit !")
-		}
+		return nil
+	}
+
+	if value > m.getExhaustValue(ip) && value != UNLIMITED {
+		log <- fmt.Sprintf("[Throttled] %s reached count", ip)
+		return errors.New("Request limit reached, Cooldown a bit !")
 	}
 
 	return nil
 }
 
-func Middleware(opts *ThrottlerOpts) func(next http.HandlerFunc) http.HandlerFunc {
+func Middleware(opts *opts) func(next http.HandlerFunc) http.HandlerFunc {
 	mwObject := newMiddleware(opts)
 	logChan := mwObject.startLogRoutine()
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
+			if mwObject.exhaustionCount == UNLIMITED && mwObject.ipThrottlingStrategy == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			if err := mwObject.throttle(logChan, r); err != nil {
 				w.WriteHeader(http.StatusTooManyRequests)
 				w.Write([]byte(err.Error()))
