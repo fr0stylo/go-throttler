@@ -35,33 +35,33 @@ func ipResolver(r *http.Request) (string, error) {
 func newMiddleware(opts *opts) *middleware {
 	var cacheProvider ICacheProvider
 	cacheProvider = NewCacheAdapter(time.Minute, time.Second*90)
-	if opts.Cache != nil {
-		cacheProvider = opts.Cache
+	if opts.cache != nil {
+		cacheProvider = opts.cache
 	}
 
 	var logger ILogger
 	logger = log.Default()
-	if opts.Log != nil {
-		logger = opts.Log
+	if opts.log != nil {
+		logger = opts.log
 	}
 
 	verbose := true
-	if opts.Verbose != nil {
-		verbose = *opts.Verbose
+	if opts.verbose != nil {
+		verbose = *opts.verbose
 	}
 
 	ipResolveFn := ipResolver
-	if opts.IpResolver != nil {
-		ipResolveFn = *opts.IpResolver
+	if opts.ipResolver != nil {
+		ipResolveFn = *opts.ipResolver
 	}
 
 	return &middleware{
 		cache:                cacheProvider,
 		log:                  logger,
 		verbose:              verbose,
-		exhaustionCount:      opts.ExhaustionCount,
+		exhaustionCount:      opts.exhaustionCount,
 		ipResolver:           ipResolveFn,
-		ipThrottlingStrategy: opts.IpThrottlingStrategy,
+		ipThrottlingStrategy: opts.ipThrottlingStrategy,
 	}
 }
 
@@ -92,8 +92,8 @@ func (m *middleware) throttle(log chan<- string, r *http.Request) error {
 
 		return nil
 	}
-
-	if value > m.getExhaustValue(ip) && value != UNLIMITED {
+	exhaustCount := m.getExhaustValue(ip)
+	if exhaustCount != UNLIMITED && value > exhaustCount {
 		log <- fmt.Sprintf("[Throttled] %s reached count", ip)
 		return errors.New("Request limit reached, Cooldown a bit !")
 	}
@@ -114,7 +114,6 @@ func Middleware(opts *opts) func(next http.HandlerFunc) http.HandlerFunc {
 			if err := mwObject.throttle(logChan, r); err != nil {
 				w.WriteHeader(http.StatusTooManyRequests)
 				w.Write([]byte(err.Error()))
-
 				return
 			}
 

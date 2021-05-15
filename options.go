@@ -5,16 +5,14 @@ import (
 	"net/http"
 )
 
-
-
 type opts struct {
-	ExhaustionCount      int64
-	Verbose              *bool
-	LimitReachedMessage  *string
-	IpResolver           *func(r *http.Request) (string, error)
-	Cache                ICacheProvider
-	Log                  ILogger
-	IpThrottlingStrategy map[*net.IPNet]int64
+	exhaustionCount      int64
+	verbose              *bool
+	limitReachedMessage  *string
+	ipResolver           *func(r *http.Request) (string, error)
+	cache                ICacheProvider
+	log                  ILogger
+	ipThrottlingStrategy map[*net.IPNet]int64
 }
 
 type ILogger interface {
@@ -22,13 +20,13 @@ type ILogger interface {
 }
 
 func WithOpts(exhaustCount int64) *opts {
-	return &opts{ExhaustionCount: exhaustCount}
+	return &opts{exhaustionCount: exhaustCount}
 }
 
 func (o *opts) WithVerbose(value bool) *opts {
 	b := value
 
-	o.Verbose = &b
+	o.verbose = &b
 
 	return o
 }
@@ -36,15 +34,13 @@ func (o *opts) WithVerbose(value bool) *opts {
 func (o *opts) WithLimitReachedMessage(value string) *opts {
 	b := value
 
-	o.LimitReachedMessage = &b
+	o.limitReachedMessage = &b
 
 	return o
 }
 
 func (o *opts) WithIpResolver(value *func(r *http.Request) (string, error)) *opts {
-	b := value
-
-	o.IpResolver = b
+	o.ipResolver = value
 
 	return o
 }
@@ -52,7 +48,7 @@ func (o *opts) WithIpResolver(value *func(r *http.Request) (string, error)) *opt
 func (o *opts) WithCache(value ICacheProvider) *opts {
 	b := value
 
-	o.Cache = b
+	o.cache = b
 
 	return o
 }
@@ -60,15 +56,13 @@ func (o *opts) WithCache(value ICacheProvider) *opts {
 func (o *opts) WithLogger(value ILogger) *opts {
 	b := value
 
-	o.Log = b
+	o.log = b
 
 	return o
 }
 
-func (o *opts)WithIpThrottlingStrategy(value map[*net.IPNet]int64) *opts {
-	b := value
-
-	o.IpThrottlingStrategy = b
+func (o *opts) WithIpThrottlingStrategy(value map[*net.IPNet]int64) *opts {
+	o.ipThrottlingStrategy = value
 
 	return o
 }

@@ -1,6 +1,7 @@
 package throttler
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -34,7 +35,6 @@ func setupServer(opt *opts) *httptest.Server {
 	mw := Middleware(opt)
 
 	wrap := mw(fakeHandler)
-
 	srv := httptest.NewServer(wrap)
 
 	return srv
@@ -78,44 +78,83 @@ func TestMiddleware_Verbose_False(t *testing.T) {
 }
 
 func BenchmarkMiddleware(b *testing.B) {
+	httptest.NewRequest(http.MethodGet, "/", nil)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	b.ResetTimer()
+	mw := Middleware(WithOpts(int64(b.N)).WithVerbose(false))
+	wrap := mw(fakeHandler)
 	for i := 0; i < b.N; i++ {
-		srv := setupServer(WithOpts(UNLIMITED).WithVerbose(false))
-		defer srv.Close()
+		w := httptest.NewRecorder()
+		wrap(w, r)
+		if w.Code != http.StatusOK {
+			b.Errorf("Status code expected 200 received %d after %d requests", w.Code, i)
+		}
+	}
+}
 
-		for j := 0; j < i; j++ {
-			resp, _ := http.Get(srv.URL)
-			if resp.StatusCode != http.StatusOK {
-				b.Errorf("Status code expected 200 received %d after %d requests in %d scope", resp.StatusCode, j, i)
-			}
+func BenchmarkMiddleware_Unlimited_count(b *testing.B) {
+	httptest.NewRequest(http.MethodGet, "/", nil)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	b.ResetTimer()
+	mw := Middleware(WithOpts(UNLIMITED).WithVerbose(false))
+	wrap := mw(fakeHandler)
+	for i := 0; i < b.N; i++ {
+		w := httptest.NewRecorder()
+		wrap(w, r)
+		if w.Code != http.StatusOK {
+			b.Errorf("Status code expected 200 received %d after %d requests", w.Code, i)
 		}
 	}
 }
 
 func BenchmarkMiddleware_Failure(b *testing.B) {
+	httptest.NewRequest(http.MethodGet, "/", nil)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	b.ResetTimer()
+	mw := Middleware(WithOpts(1).WithVerbose(false))
+	wrap := mw(fakeHandler)
 	for i := 0; i < b.N; i++ {
-		srv := setupServer(WithOpts(1).WithVerbose(false))
-		defer srv.Close()
-
-		for j := 0; j < i; j++ {
-			resp, _ := http.Get(srv.URL)
-			if resp.StatusCode != http.StatusTooManyRequests && j > 1 {
-				b.Errorf("Status code expected 429 received %d after %d requests in %d scope", resp.StatusCode, j+1, i)
-			}
+		w := httptest.NewRecorder()
+		wrap(w, r)
+		if w.Code != http.StatusTooManyRequests && i > 1 {
+			b.Errorf("Status code expected 429 received %d after %d requests", w.Code, i)
 		}
 	}
 }
 
 func BenchmarkMiddleware_Verbose(b *testing.B) {
+	fakeLogger := NewSpyLogger()
+	httptest.NewRequest(http.MethodGet, "/", nil)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	b.ResetTimer()
+	mw := Middleware(WithOpts(1).WithVerbose(true).WithLogger(fakeLogger))
+	wrap := mw(fakeHandler)
 	for i := 0; i < b.N; i++ {
-		fakeLogger := NewSpyLogger()
-		srv := setupServer(WithOpts(1).WithVerbose(true).WithLogger(fakeLogger))
-		defer srv.Close()
+		w := httptest.NewRecorder()
+		wrap(w, r)
+		if w.Code != http.StatusTooManyRequests && i > 1 {
+			b.Errorf("Status code expected 429 received %d after %d requests", w.Code, i)
+		}
+	}
+}
 
-		for j := 0; j < i; j++ {
-			resp, _ := http.Get(srv.URL)
-			if resp.StatusCode != http.StatusTooManyRequests && j > 1 {
-				b.Errorf("Status code expected 429 received %d after %d requests in %d scope", resp.StatusCode, j+1, i)
-			}
+func BenchmarkMiddleware_ThrottlingStrategy(b *testing.B) {
+	fakeLogger := NewSpyLogger()
+	httptest.NewRequest(http.MethodGet, "/", nil)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.RemoteAddr = "127.0.0.1"
+	b.ResetTimer()
+	ip := net.IPNet{
+		IP:   net.ParseIP("127.0.0.1"),
+		Mask: net.IPv4Mask(255, 255, 255, 0),
+	}
+	mw := Middleware(WithOpts(1).WithVerbose(true).WithLogger(fakeLogger).WithIpThrottlingStrategy(map[*net.IPNet]int64{&ip: UNLIMITED}))
+	wrap := mw(fakeHandler)
+	for i := 0; i < b.N; i++ {
+		w := httptest.NewRecorder()
+		wrap(w, r)
+		if w.Code != http.StatusOK && i > 1 {
+			b.Errorf("Status code expected 200 received %d after %d requests", w.Code, i)
 		}
 	}
 }
