@@ -11,7 +11,8 @@ func Test(w http.ResponseWriter, r *http.Request) {
 func main() {
 	mux := http.NewServeMux()
 
-	mux.Handle("/", throttler.Middleware(throttler.WithOpts(100))(Test))
+	//Add throttler as middleware function to your route to unleash beast power
+	mux.Handle("/", throttler.Middleware(throttler.NewOpts(100).WithVerbose(false))(Test))
 
 	http.ListenAndServe(":3000", mux)
 }

@@ -41,7 +41,7 @@ func setupServer(opt *opts) *httptest.Server {
 }
 
 func TestMiddleware_ShouldReturn200(t *testing.T) {
-	srv := setupServer(WithOpts(UNLIMITED).WithVerbose(false))
+	srv := setupServer(NewOpts(UNLIMITED).WithVerbose(false))
 	defer srv.Close()
 
 	resp, _ := http.Get(srv.URL)
@@ -52,7 +52,7 @@ func TestMiddleware_ShouldReturn200(t *testing.T) {
 }
 
 func TestMiddleware_ShouldReturn429(t *testing.T) {
-	srv := setupServer(WithOpts(1).WithVerbose(false))
+	srv := setupServer(NewOpts(1).WithVerbose(false))
 	defer srv.Close()
 
 	resp, _ := http.Get(srv.URL)
@@ -66,7 +66,7 @@ func TestMiddleware_ShouldReturn429(t *testing.T) {
 func TestMiddleware_Verbose_False(t *testing.T) {
 	fakeLogger := NewSpyLogger()
 
-	srv := setupServer(WithOpts(1).WithVerbose(false).WithLogger(fakeLogger))
+	srv := setupServer(NewOpts(1).WithVerbose(false).WithLogger(fakeLogger))
 	defer srv.Close()
 
 	http.Get(srv.URL)
@@ -81,7 +81,7 @@ func BenchmarkMiddleware(b *testing.B) {
 	httptest.NewRequest(http.MethodGet, "/", nil)
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	b.ResetTimer()
-	mw := Middleware(WithOpts(int64(b.N)).WithVerbose(false))
+	mw := Middleware(NewOpts(int64(b.N)).WithVerbose(false))
 	wrap := mw(fakeHandler)
 	for i := 0; i < b.N; i++ {
 		w := httptest.NewRecorder()
@@ -96,7 +96,7 @@ func BenchmarkMiddleware_Unlimited_count(b *testing.B) {
 	httptest.NewRequest(http.MethodGet, "/", nil)
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	b.ResetTimer()
-	mw := Middleware(WithOpts(UNLIMITED).WithVerbose(false))
+	mw := Middleware(NewOpts(UNLIMITED).WithVerbose(false))
 	wrap := mw(fakeHandler)
 	for i := 0; i < b.N; i++ {
 		w := httptest.NewRecorder()
@@ -111,7 +111,7 @@ func BenchmarkMiddleware_Failure(b *testing.B) {
 	httptest.NewRequest(http.MethodGet, "/", nil)
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	b.ResetTimer()
-	mw := Middleware(WithOpts(1).WithVerbose(false))
+	mw := Middleware(NewOpts(1).WithVerbose(false))
 	wrap := mw(fakeHandler)
 	for i := 0; i < b.N; i++ {
 		w := httptest.NewRecorder()
@@ -127,7 +127,7 @@ func BenchmarkMiddleware_Verbose(b *testing.B) {
 	httptest.NewRequest(http.MethodGet, "/", nil)
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	b.ResetTimer()
-	mw := Middleware(WithOpts(1).WithVerbose(true).WithLogger(fakeLogger))
+	mw := Middleware(NewOpts(1).WithVerbose(true).WithLogger(fakeLogger))
 	wrap := mw(fakeHandler)
 	for i := 0; i < b.N; i++ {
 		w := httptest.NewRecorder()
@@ -148,7 +148,7 @@ func BenchmarkMiddleware_ThrottlingStrategy(b *testing.B) {
 		IP:   net.ParseIP("127.0.0.1"),
 		Mask: net.IPv4Mask(255, 255, 255, 0),
 	}
-	mw := Middleware(WithOpts(1).WithVerbose(true).WithLogger(fakeLogger).WithIpThrottlingStrategy(map[*net.IPNet]int64{&ip: UNLIMITED}))
+	mw := Middleware(NewOpts(1).WithVerbose(true).WithLogger(fakeLogger).WithIpThrottlingStrategy(map[*net.IPNet]int64{&ip: UNLIMITED}))
 	wrap := mw(fakeHandler)
 	for i := 0; i < b.N; i++ {
 		w := httptest.NewRecorder()

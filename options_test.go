@@ -9,7 +9,7 @@ import (
 )
 
 func TestWithOpts(t *testing.T) {
-	opt := WithOpts(UNLIMITED)
+	opt := NewOpts(UNLIMITED)
 
 	if opt.exhaustionCount != UNLIMITED {
 		t.Errorf("Exhaustion count should be equal %d was %d", UNLIMITED, opt.exhaustionCount)

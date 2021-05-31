@@ -101,6 +101,8 @@ func (m *middleware) throttle(log chan<- string, r *http.Request) error {
 	return nil
 }
 
+// Middleware function that is supposed to throttle requests over period of time
+// It return http.HandlerFunc that can be attached to any server providers.
 func Middleware(opts *opts) func(next http.HandlerFunc) http.HandlerFunc {
 	mwObject := newMiddleware(opts)
 	logChan := mwObject.startLogRoutine()
